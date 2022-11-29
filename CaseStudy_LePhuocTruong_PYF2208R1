@@ -1,0 +1,191 @@
+import os
+import playsound
+import speech_recognition as sr
+import time
+import sys
+import ctypes
+import wikipedia
+import datetime
+import json
+import re
+import webbrowser 
+import smtplib
+import requests
+import urllib
+import urllib.request as urllib2
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from time import strftime
+from gtts import gTTS
+from youtube_search import YoutubeSearch
+
+language = 'vi'
+path = ChromeDriverManager().install()
+wikipedia.set_lang('vi')
+
+def speak(text):
+    print("Bot: {}".format(text))
+    # truyền vào text để đọc lên
+    tts = gTTS(text=text, lang=language, slow=False)
+    tts.save("sound.mp3") #lưu lại thành file mpe)
+    playsound.playsound("sound.mp3", False) #bật file vừa thu lên
+    os.remove("sound.mp3") #xoá đi để tránh bị đầy dữ liệu
+
+
+def get_audio():
+    r = sr.Recognizer()
+    with sr.Microphone() as source: #Ở đây sử dụng with để bật cái mic sau khi dùng xong mic sẽ tự tắt
+        print("Tôi: ", end='')
+        audio = r.listen(source, phrase_time_limit=5)
+        try:
+            text = r.recognize_google(audio, language="vi-VN")
+            print(text)
+            return text
+        except:
+            print("...")
+            return 0
+def stop():
+    speak("Hẹn gặp lại bạn sau ạ!")
+    
+    
+# để hỏi lại 5 lần nếu không có hồi âm thì stop 
+def get_text():
+    for i in range(5): # cho 5 lần nhận vào text, nếu có text thì return lại 
+        text = get_audio()
+        if text:
+            return text.lower() #trả về các giá trị thường 
+        elif i < 4 :
+            speak("Snack không nghe rõ. Bạn có thể nói lại được không!")
+    time.sleep(10) #đợi khoảng 10s
+    stop()
+    return 0
+
+
+
+def talk(name):
+    day_time= int (strftime('%H'))
+    if day_time<12:
+        speak('chào buổi sáng{}.Chúc Trường một ngày mới tốt lành'.format(name))
+    elif day_time <18:
+        speak(' chào buổi chiều{}'.format(name))
+    else:
+        speak(' chào buổi tối{}'.format(name))
+    time.sleep(5)
+    speak("Trong người trường hiện tại thấy như thế nào thấy như thế nào")
+    time.sleep(5)
+    traloi=get_voice()
+    if traloi:
+        if " bình thường " in traloi:
+            speak("Chào mừng bạn đã đến với Kỷ Nguyên Vô Tận")
+        elif "Khó chịu" in traloi:
+            speak("Trường phải cần nghỉ ngơi thêm")
+        else:
+            speak("Cố Lên Nhé !")
+
+
+
+# Xem dự Báo thời tiết
+def weather():
+    speak("Bạn muốn xem thời tiết ở đâu ạ!")
+    time.sleep(3) # Chờ phản hồi khoảng 3 giây
+    url = "http://api.openweathermap.org/data/2.5/weather?"
+    city = get_text()
+    if not city:
+        pass
+    api_key = "448760eecbf716c67c9fd5ec27310c28"
+    call_url = url + "appid=" + api_key + "&q=" + city + "&units=metric"
+    response = requests.get(call_url)
+    data = response.json()
+    if data["cod"] != "404":
+        city_res = data["main"]
+        current_temp = city_res["temp"] # lấy nhiệt độ
+        current_pressure = city_res["pressure"] # lấy áp suất không khí
+        current_humidity = city_res["humidity"] # ấy độ ẩm 
+        sun_time  = data["sys"] # lấy ngày tháng năm
+        sun_rise = datetime.datetime.fromtimestamp(sun_time["sunrise"]) # mặt trời mọc lúc mấy giờ
+        sun_set = datetime.datetime.fromtimestamp(sun_time["sunset"])# mặt trời lắn lúc mấy giờ
+        wind = data["wind"]
+        wind_speed= wind['speed'] # tốc độ gió
+
+        
+        wther = data["weather"]
+        weather_des = wther[0]["description"]
+        now = datetime.datetime.now()
+        content = """
+        Hôm nay là ngày {day} tháng {month} năm {year}
+        Nhiệt độ trung bình là {temp} độ C
+        Áp suất không khí là {pressure} héc tơ Pascal
+        Độ ẩm là {humidity}% 
+        Có tốc độ gió là {speed} kilomet trên giờ
+        Mặt trời mọc vào {hourrise} giờ {minrise} phút
+        Mặt trời lặn vào {hourset} giờ {minset} phút
+        Trời hôm nay quang mây. Dự báo mưa rải rác ở một số nơi.""".format(day = now.day, month = now.month, year= now.year, hourrise = sun_rise.hour, minrise = sun_rise.minute,
+                                                                           hourset = sun_set.hour, minset = sun_set.minute, 
+                                                                           temp = current_temp,speed=wind_speed,  pressure = current_pressure, humidity = current_humidity)
+        speak(content)
+        time.sleep(25)
+    else:
+        speak("Không tìm thấy thành phố!")
+
+
+# Mở trang web mà mình mong muốn
+def openwebsite(text):
+    regex = re.search('mở (.+)',text)
+    if regex:
+        domain = regex.group(1)
+        url = 'https://www.'+domain
+        webbrowser.open(url)
+        speak('Trang web của bạn cần đã được mở lên ạ')
+        return True
+    else : 
+        return False
+
+
+
+
+#Mở google và tìm kiếm một trang web nào đó
+
+def openresearch(text):
+    search_for= text.split("kiếm",1)[1] #tách các từ sau từ kiếm ra sau đó lưu vào search_for
+    speak("Oke la")
+    driver=webdriver.Chrome(path)# gọi hàm webdriver để mở chrome
+    driver.get("http://www.google.com") # truy cập vào google
+    query= driver.find_element(By.XPATH,"//input[@name='
+    
+    q']")
+    query.send_keys(str(search_for)) 
+    query.send_keys(Keys.RETURN)
+
+
+
+
+
+
+def call_snack():
+    speak("Cho mình hỏi bạn tên là gì?")
+    time.sleep(4)
+    name = get_text()
+    if name: 
+        speak("Chào mừng bạn đến với Kỷ nguyên vô tận")
+        time.sleep(3)
+        speak("Bạn cần Snake giúp gì ạ")
+        time.sleep(2)
+        while True:
+            text=get_text()
+            if not text:
+                break
+            elif "Trò chuyện" in text or " Nói chuyện " in text:
+                talk(name)
+            elif "thời tiết" in text :
+                weather()
+            elif "thôi" in text or " dừng " in text:
+                stop()
+                break 
+            elif "tìm kiếm "in text:
+                openresearch(text)
+            elif "mở " in text:
+                openwebsite(text)
+
+call_snack()
